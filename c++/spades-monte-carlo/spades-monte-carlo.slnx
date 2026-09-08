@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="spades-monte-carlo.vcxproj" Id="a1cfe63a-d046-44c7-a750-fdf7b391653a" />
+</Solution>
