@@ -31,8 +31,12 @@ Hand Deck() {
 // const & reads a vector without copying or changing it.
 Hand legal_cards(const Hand& hand, const Trick& trick, bool spades_broken) {
     Hand choices{};
+
+    //if the trick has started, the only legal cards are those that follow suit
     if (!trick.empty()) {
         for (const auto& card : hand)
+
+            // if the suit of the card in given hand is the same as the leading suit, it is legal
             if (card.second == trick.front().second.second) choices.push_back(card);
         return choices.empty() ? hand : choices;
     }
@@ -44,6 +48,7 @@ Hand legal_cards(const Hand& hand, const Trick& trick, bool spades_broken) {
     return hand;
 }
 
+//check if any given card beats the current winner to evaluate trick winner
 
 bool beats(const Card& card, const Card& winner, const std::string& /*led_suit*/) {
     if (card.second == "Spades" && winner.second != "Spades") return true;
@@ -53,7 +58,8 @@ bool beats(const Card& card, const Card& winner, const std::string& /*led_suit*/
 }
 
 
-// Like key=lambda card: card[0]; ties retain the first card.
+// Like key=lambda card: card[0]; ties retain the first card
+// ease of use to check if a given card's rank is greater than another's
 bool rank_less(const Card& a, const Card& b) { return a.first < b.first; }
 
 Card play_card(const Hand& hand, const Trick& trick, bool spades_broken) {
