@@ -1,42 +1,39 @@
-
-// A C++ port of my python script that computes the estimated tricks taken and recommended bid
-// for any given hand of 13 cards, following standard rules of the card game spades
-// mostly intended to help me gain experience as I learn C++
-
 #include <algorithm>
 #include <array>
-#include <cmath>
+#include <chrono>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <numeric>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
-// Python tuple: pair; Python list: vector.
 using Card = std::pair<int, std::string>;
 using Hand = std::vector<Card>;
 using Trick = std::vector<std::pair<int, Card>>;
 using Hands = std::array<Hand, 4>;
 
-//define the deck; considered as a large hand (array of cards)
-Hand Deck() {
-    Hand deck{};
+struct Fixture {
+    Hands hands;
+    int start_player;
+    bool spades_broken;
+};
+
+Hand deck() {
+    Hand cards;
     for (const std::string suit : {"Spades", "Hearts", "Diamonds", "Clubs"})
-        for (int rank = 2; rank < 15; ++rank) deck.emplace_back(rank, suit);
-    return deck;
+        for (int rank = 2; rank < 15; ++rank) cards.emplace_back(rank, suit);
+    return cards;
 }
 
-// const & reads a vector without copying or changing it.
 Hand legal_cards(const Hand& hand, const Trick& trick, bool spades_broken) {
-    Hand choices{};
-
-    //if the trick has started, the only legal cards are those that follow suit
+    Hand choices;
     if (!trick.empty()) {
         for (const auto& card : hand)
-
-            // if the suit of the card in given hand is the same as the leading suit, it is legal
             if (card.second == trick.front().second.second) choices.push_back(card);
         return choices.empty() ? hand : choices;
     }
@@ -48,8 +45,6 @@ Hand legal_cards(const Hand& hand, const Trick& trick, bool spades_broken) {
     return hand;
 }
 
-//check if any given card beats the current winner to evaluate trick winner
-
 bool beats(const Card& card, const Card& winner, const std::string& /*led_suit*/) {
     if (card.second == "Spades" && winner.second != "Spades") return true;
     if (card.second != "Spades" && winner.second == "Spades") return false;
@@ -57,19 +52,18 @@ bool beats(const Card& card, const Card& winner, const std::string& /*led_suit*/
     return card.first > winner.first;
 }
 
-
-// Like key=lambda card: card[0]; ties retain the first card
-// ease of use to check if a given card's rank is greater than another's
-bool rank_less(const Card& a, const Card& b) { return a.first < b.first; }
+bool rank_less(const Card& left, const Card& right) { return left.first < right.first; }
 
 Card play_card(const Hand& hand, const Trick& trick, bool spades_broken) {
     const auto choices = legal_cards(hand, trick, spades_broken);
     if (choices.empty()) throw std::invalid_argument("Cannot play an empty hand");
     if (trick.empty()) return *std::max_element(choices.begin(), choices.end(), rank_less);
+
     Hand winning_options, non_spades;
-    // Preserves Python's policy: compare against the lead card, even if beaten.
+    const auto& lead_card = trick.front().second;
     for (const auto& card : choices) {
-        if (beats(card, trick.front().second, trick.front().second.second)) winning_options.push_back(card);
+        // Preserve the original policy for a fair port comparison.
+        if (beats(card, lead_card, lead_card.second)) winning_options.push_back(card);
         if (card.second != "Spades") non_spades.push_back(card);
     }
     if (!winning_options.empty())
@@ -78,14 +72,14 @@ Card play_card(const Hand& hand, const Trick& trick, bool spades_broken) {
     return *std::min_element(discards.begin(), discards.end(), rank_less);
 }
 
-// Available for future use; Python's simulation also does not call this policy.
 Card play_card_nil(const Hand& hand, const Trick& trick, bool spades_broken) {
     const auto choices = legal_cards(hand, trick, spades_broken);
     if (choices.empty()) throw std::invalid_argument("Cannot play an empty hand");
     if (!trick.empty()) {
         Hand safe;
+        const auto& lead_card = trick.front().second;
         for (const auto& card : choices)
-            if (!beats(card, trick.front().second, trick.front().second.second)) safe.push_back(card);
+            if (!beats(card, lead_card, lead_card.second)) safe.push_back(card);
         if (!safe.empty()) return *std::max_element(safe.begin(), safe.end(), rank_less);
     }
     return *std::min_element(choices.begin(), choices.end(), rank_less);
@@ -95,7 +89,7 @@ std::pair<int, bool> play_trick(Hands& hands, int start_player, bool spades_brok
     Trick trick;
     for (int i = 0; i < 4; ++i) {
         const int player = (start_player + i) % 4;
-        auto& hand = hands[player]; // Mutable reference: remove from the actual hand.
+        auto& hand = hands[player];
         const auto card = play_card(hand, trick, spades_broken);
         hand.erase(std::find(hand.begin(), hand.end(), card));
         trick.emplace_back(player, card);
@@ -107,82 +101,164 @@ std::pair<int, bool> play_trick(Hands& hands, int start_player, bool spades_brok
     return {winner.first, spades_broken};
 }
 
+std::array<int, 4> play_dealt_game(const Hands& dealt_hands, int start_player = 0,
+    bool spades_broken = false) {
+    for (const auto& hand : dealt_hands)
+        if (hand.size() != 13) throw std::invalid_argument("Expected four 13-card hands");
+    auto hands = dealt_hands;
+    std::array<int, 4> tricks_won{};
+    for (int i = 0; i < 13; ++i) {
+        const auto [winner, broken] = play_trick(hands, start_player, spades_broken);
+        ++tricks_won[winner];
+        start_player = winner;
+        spades_broken = broken;
+    }
+    if (std::accumulate(tricks_won.begin(), tricks_won.end(), 0) != 13)
+        throw std::logic_error("A dealt game must award 13 tricks");
+    return tricks_won;
+}
+
 int play_game(const Hand& my_hand, const Hand& cards_left, std::mt19937& rng) {
     if (my_hand.size() != 13 || cards_left.size() != 39)
         throw std::invalid_argument("Expected 13 cards in hand and 39 remaining cards");
-    auto shuffled = cards_left; // Equivalent to .copy().
+    auto shuffled = cards_left;
     std::shuffle(shuffled.begin(), shuffled.end(), rng);
     Hands hands = {my_hand, Hand(shuffled.begin(), shuffled.begin() + 13),
         Hand(shuffled.begin() + 13, shuffled.begin() + 26), Hand(shuffled.begin() + 26, shuffled.end())};
-    std::array<int, 4> tricks_won{};
-    int start_player = 0;
-    bool spades_broken = false;
-    for (int i = 0; i < 13; ++i) {
-        const auto result = play_trick(hands, start_player, spades_broken);
-        ++tricks_won[result.first];
-        start_player = result.first;
-        spades_broken = result.second;
-    }
-    return tricks_won[0];
+    return play_dealt_game(hands)[0];
 }
 
-double est_tricks(const Hand& my_hand, int num_trials, std::mt19937& rng) {
-    if (num_trials <= 0) throw std::invalid_argument("num_trials must be positive");
-    Hand remaining;
-    for (const auto& card : Deck())
-        if (std::find(my_hand.begin(), my_hand.end(), card) == my_hand.end()) remaining.push_back(card);
-    double total = 0;
-    for (int i = 0; i < num_trials; ++i) total += play_game(my_hand, remaining, rng);
-    return total / num_trials;
+std::vector<long long> score_bid_totals(const std::vector<int>& results) {
+    if (results.empty()) throw std::invalid_argument("results must not be empty");
+    std::vector<long long> totals(14);
+    for (int bid = 0; bid < 14; ++bid)
+        for (int tricks : results)
+            totals[bid] += bid == 0 ? (tricks == 0 ? 100 : -100)
+                : tricks >= bid ? 10 * bid + tricks - bid : -10 * bid;
+    return totals;
 }
 
-std::vector<int> score_bids(const std::vector<int>& results) {
-    if (results.empty()) throw std::invalid_argument("trial_results must contain at least one result");
-    std::vector<int> scores;
-    for (int bid = 0; bid < 14; ++bid) {
-        double total = 0;
-        for (int tricks : results) {
-            if (bid == 0) total += tricks == 0 ? 100 : -100;
-            else if (tricks >= bid) total += 10 * bid + tricks - bid;
-            else total -= 10 * bid;
+std::vector<double> score_bids(const std::vector<int>& results) {
+    const auto totals = score_bid_totals(results);
+    std::vector<double> means;
+    means.reserve(totals.size());
+    for (const auto total : totals) means.push_back(static_cast<double>(total) / results.size());
+    return means;
+}
+
+Card card_from_id(int id) {
+    static const std::array<std::string, 4> suits = {"Spades", "Hearts", "Diamonds", "Clubs"};
+    if (id < 0 || id >= 52) throw std::invalid_argument("Card ID must be from 0 through 51");
+    return {id % 13 + 2, suits[id / 13]};
+}
+
+std::vector<Fixture> load_fixtures(const std::string& path) {
+    std::ifstream input(path);
+    if (!input) throw std::runtime_error("Could not open fixture file: " + path);
+    std::vector<Fixture> fixtures;
+    std::string line;
+    int line_number = 0;
+    while (std::getline(input, line)) {
+        ++line_number;
+        line = line.substr(0, line.find('#'));
+        std::istringstream values(line);
+        int start, broken;
+        if (!(values >> start)) continue;
+        if (!(values >> broken) || start < 0 || start > 3 || (broken != 0 && broken != 1))
+            throw std::runtime_error("Invalid fixture header on line " + std::to_string(line_number));
+        Fixture fixture{{}, start, broken != 0};
+        std::array<bool, 52> seen{};
+        for (int i = 0; i < 52; ++i) {
+            int id;
+            if (!(values >> id) || id < 0 || id >= 52 || seen[id])
+                throw std::runtime_error("Invalid cards on fixture line " + std::to_string(line_number));
+            seen[id] = true;
+            fixture.hands[i / 13].push_back(card_from_id(id));
         }
-        // floor matters for negative averages: integer division would truncate.
-        scores.push_back(static_cast<int>(std::floor(total / results.size())));
+        int extra;
+        if (values >> extra)
+            throw std::runtime_error("Too many cards on fixture line " + std::to_string(line_number));
+        fixtures.push_back(std::move(fixture));
     }
-    return scores;
+    if (fixtures.empty()) throw std::runtime_error("Fixture file is empty");
+    return fixtures;
 }
 
-int main() {
-    constexpr int num_trials = 10000;
-    std::mt19937 rng(std::random_device{}());
+void benchmark(const std::string& path, int games, int repeats) {
+    const auto fixtures = load_fixtures(path);
+    std::vector<std::array<int, 4>> expected;
+    for (const auto& fixture : fixtures)
+        expected.push_back(play_dealt_game(fixture.hands, fixture.start_player, fixture.spades_broken));
 
-    auto deck = Deck();
-    std::shuffle(deck.begin(), deck.end(), rng);
+    std::cout << "CHECK fixtures=" << fixtures.size() << " signature=";
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+        if (i) std::cout << ';';
+        for (int player = 0; player < 4; ++player) {
+            if (player) std::cout << ',';
+            std::cout << expected[i][player];
+        }
+    }
+    std::cout << '\n';
 
-    const Hand my_hand(deck.begin(), deck.begin() + 13);
-    const Hand remaining(deck.begin() + 13, deck.end());
+    for (int i = 0; i < games; ++i) {
+        const auto& fixture = fixtures[i % fixtures.size()];
+        play_dealt_game(fixture.hands, fixture.start_player, fixture.spades_broken);
+    }
 
-    std::vector<int> results;
-    results.reserve(num_trials);
+    for (int repeat = 1; repeat <= repeats; ++repeat) {
+        std::vector<int> results;
+        results.reserve(games);
+        long long checksum = 0;
+        const auto start = std::chrono::steady_clock::now();
+        for (int i = 0; i < games; ++i) {
+            const auto& fixture = fixtures[i % fixtures.size()];
+            const auto tricks = play_dealt_game(fixture.hands, fixture.start_player, fixture.spades_broken);
+            results.push_back(tricks[0]);
+            for (int player = 0; player < 4; ++player) checksum += (player + 1) * tricks[player];
+        }
+        const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        const auto totals = score_bid_totals(results);
+        const int best_bid = static_cast<int>(std::distance(totals.begin(), std::max_element(totals.begin(), totals.end())));
+        std::cout << std::fixed << std::setprecision(9) << "TIME repeat=" << repeat << " games=" << games
+            << " seconds=" << seconds << " checksum=" << checksum << " best_bid=" << best_bid << " score_totals=";
+        for (std::size_t i = 0; i < totals.size(); ++i) {
+            if (i) std::cout << ',';
+            std::cout << totals[i];
+        }
+        std::cout << '\n';
+    }
+}
 
-    for (int i = 0; i < num_trials; ++i) { 
-        results.push_back(play_game(my_hand, remaining, rng));
-    };
+int main(int argc, char* argv[]) {
+    try {
+        if (argc > 1 && std::string(argv[1]) == "--benchmark") {
+            if (argc != 5) throw std::invalid_argument("usage: spades-monte-carlo --benchmark FIXTURES GAMES REPEATS");
+            const int games = std::stoi(argv[3]);
+            const int repeats = std::stoi(argv[4]);
+            if (games <= 0 || repeats <= 0) throw std::invalid_argument("GAMES and REPEATS must be positive");
+            benchmark(argv[2], games, repeats);
+            return 0;
+        }
 
-    const double mean = std::accumulate(results.begin(), results.end(), 0.0) / num_trials;
-
-    std::cout << "Hand: ";
-    for (const auto& card : my_hand) { 
-        std::cout << '(' << card.first << ", " << card.second << ") ";
-    };
-
-    std::cout << "\nEstimated Tricks Taken: " << mean << '\n';
-
-    const auto scores = score_bids(results);
-    std::cout << "List of average scores for each bid: ";
-    for (int score : scores) std::cout << score << ' ';
-
-    const auto best = std::max_element(scores.begin(), scores.end());
-    const auto best_bid = std::distance(scores.begin(), best);
-    std::cout << "\nRecommended Bid of " << best_bid << " with an average score of " << *best << '\n';
+        constexpr int num_trials = 10000;
+        std::mt19937 rng(std::random_device{}());
+        auto cards = deck();
+        std::shuffle(cards.begin(), cards.end(), rng);
+        const Hand my_hand(cards.begin(), cards.begin() + 13);
+        const Hand remaining(cards.begin() + 13, cards.end());
+        std::vector<int> results;
+        results.reserve(num_trials);
+        for (int i = 0; i < num_trials; ++i) results.push_back(play_game(my_hand, remaining, rng));
+        const double mean = std::accumulate(results.begin(), results.end(), 0.0) / num_trials;
+        const auto scores = score_bids(results);
+        const int best_bid = static_cast<int>(std::distance(scores.begin(), std::max_element(scores.begin(), scores.end())));
+        std::cout << "Hand: ";
+        for (const auto& card : my_hand) std::cout << '(' << card.first << ", " << card.second << ") ";
+        std::cout << "\nEstimated Tricks Taken: " << mean << "\nList of average scores for each bid: ";
+        for (double score : scores) std::cout << score << ' ';
+        std::cout << "\nRecommended Bid of " << best_bid << " with an average score of " << scores[best_bid] << '\n';
+    } catch (const std::exception& error) {
+        std::cerr << "error: " << error.what() << '\n';
+        return 1;
+    }
 }
