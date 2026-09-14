@@ -2,20 +2,23 @@
 
 A simple Monte Carlo simulation that estimates how many tricks any given hand might take in the card game spades, and recommends a bid based on simulated scores. Includes an original Python implementation and a C++ port built as a learning project.
 
-Both versions generate a random 13-card hand, keep it fixed, and simulate 10,000 deals of the remaining cards. They output the simulated hand, estimated tricks taken, average scores for bids from 0 to 13, and a recommended bid.
+Both versions generate a random 13-card hand, keep it fixed, and simulate 10,000 deals of the remaining cards. They output the simulated hand, estimated tricks taken, average scores for bids from 0 to 13, and a recommended bid. For benchmarking, the program also runs an untimed warmup before each sample.
+
+## Benchmark result
+
+The C++ version completed the checked simulation workload 4.81 times faster than Python on the test machine. Across seven samples of 100,000 identical dealt games, Python's median runtime was 5.563 seconds and C++'s median was 1.158 seconds.
+
+Both implementations matched on all four trick totals for each shared fixture, the recommended bid, and every bid score total. See [benchmark_results.md](benchmark_results.md) for the raw measurements and machine details.
 
 ## Python
 
 Source: [spades_sim.py](spades_sim.py)
 
-Requires Python 3, NumPy, and Matplotlib. From the repository root:
+Requires Python 3. From the repository root:
 
 ```sh
-python -m pip install numpy matplotlib
 python spades_sim.py
 ```
-
-The script also calculates a running mean; uncomment the convergence plotting block to display it.
 
 ## C++
 
@@ -27,4 +30,6 @@ Open [the solution](c++/spades-monte-carlo/spades-monte-carlo.slnx) in a version
 
 Change `num_trials` in the Python script or in C++'s `main()` to adjust the simulation count.
 
-The simulations enforce following suit and restrictions on leading spades, but use simple card-playing heuristics. Players compare potential plays the current winning card, and player 0 always leads the first trick. Partnership strategy, team scoring, and accumulated bag penalties are not yet modeled. Nil bids are scored, but the dedicated nil-playing policy hasn't been implemented in simulations.
+The simulations enforce following suit and restrictions on leading spades, but use simple card-playing heuristics. The play policy compares candidate cards against the trick's lead card, even if another card has already taken the lead. Player 0 starts the first trick during the normal random simulation. Benchmark fixtures vary the starting player and initial spades state.
+
+Partnership strategy, team scoring, and accumulated bag penalties are not modeled. Nil bids are scored, but simulations do not use the separate nil-playing helper. Replaying benchmark fixtures measures simulation throughput and does not generate new Monte Carlo samples.
