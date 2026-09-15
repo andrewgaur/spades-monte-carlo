@@ -5,3 +5,4 @@ Release/
 *.vcxproj.user
 __pycache__/
 testing.txt
+test_card_policy.py

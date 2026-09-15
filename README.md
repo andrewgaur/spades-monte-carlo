@@ -6,7 +6,7 @@ Both versions generate a random 13-card hand, keep it fixed, and simulate 10,000
 
 ## Benchmark result
 
-The C++ version completed the checked simulation workload 4.81 times faster than Python on the test machine. Across seven samples of 100,000 identical dealt games, Python's median runtime was 5.563 seconds and C++'s median was 1.158 seconds.
+The C++ version completed the checked simulation workload 4.94 times faster than Python on the test machine. Across seven samples of 100,000 identical dealt games, Python's median runtime was 6.482 seconds and C++'s median was 1.311 seconds.
 
 Both implementations matched on all four trick totals for each shared fixture, the recommended bid, and every bid score total. See [benchmark_results.md](benchmark_results.md) for the raw measurements and machine details.
 
@@ -30,6 +30,6 @@ Open [the solution](c++/spades-monte-carlo/spades-monte-carlo.slnx) in a version
 
 Change `num_trials` in the Python script or in C++'s `main()` to adjust the simulation count.
 
-The simulations enforce following suit and restrictions on leading spades, but use simple card-playing heuristics. The play policy compares candidate cards against the trick's lead card, even if another card has already taken the lead. Player 0 starts the first trick during the normal random simulation. Benchmark fixtures vary the starting player and initial spades state.
+The simulations enforce following suit and restrictions on leading spades, but use simple card-playing heuristics. Players compare candidate cards against the current winning card and play the lowest card that can take the trick. Player 0 starts the first trick during the normal random simulation. Benchmark fixtures vary the starting player and initial spades state.
 
 Partnership strategy, team scoring, and accumulated bag penalties are not modeled. Nil bids are scored, but simulations do not use the separate nil-playing helper. Replaying benchmark fixtures measures simulation throughput and does not generate new Monte Carlo samples.
