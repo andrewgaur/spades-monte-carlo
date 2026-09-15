@@ -28,6 +28,15 @@ def beats(card, winning_card, led_suit):
     return card[0] > winning_card[0]
 
 
+def winning_play(trick):
+    winner = trick[0]
+    led_suit = winner[1][1]
+    for play in trick[1:]:
+        if beats(play[1], winner[1], led_suit):
+            winner = play
+    return winner
+
+
 def play_card(hand, trick, spades_broken):
     choices = legal_cards(hand, trick, spades_broken)
     if not choices:
@@ -35,9 +44,9 @@ def play_card(hand, trick, spades_broken):
     if not trick:
         return max(choices, key=lambda card: card[0])
 
-    # Preserve the original policy for a fair port comparison.
-    lead_card = trick[0][1]
-    winning_options = [card for card in choices if beats(card, lead_card, lead_card[1])]
+    winning_card = winning_play(trick)[1]
+    led_suit = trick[0][1][1]
+    winning_options = [card for card in choices if beats(card, winning_card, led_suit)]
     if winning_options:
         return min(winning_options, key=lambda card: card[0])
     non_spades = [card for card in choices if card[1] != "Spades"]
@@ -49,8 +58,9 @@ def play_card_nil(hand, trick, spades_broken):
     if not choices:
         raise ValueError("Cannot play an empty hand")
     if trick:
-        lead_card = trick[0][1]
-        safe = [card for card in choices if not beats(card, lead_card, lead_card[1])]
+        winning_card = winning_play(trick)[1]
+        led_suit = trick[0][1][1]
+        safe = [card for card in choices if not beats(card, winning_card, led_suit)]
         if safe:
             return max(safe, key=lambda card: card[0])
     return min(choices, key=lambda card: card[0])
@@ -66,11 +76,7 @@ def play_trick(hands, start_player, spades_broken):
         if card[1] == "Spades":
             spades_broken = True
 
-    winning_player, winning_card = trick[0]
-    led_suit = winning_card[1]
-    for player, card in trick[1:]:
-        if beats(card, winning_card, led_suit):
-            winning_player, winning_card = player, card
+    winning_player, _ = winning_play(trick)
     return winning_player, spades_broken
 
 
