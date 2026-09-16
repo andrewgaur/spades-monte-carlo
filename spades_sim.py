@@ -1,7 +1,7 @@
 import random
 import sys
 from time import perf_counter
-
+import csv
 
 SUITS = ["Spades", "Hearts", "Diamonds", "Clubs"]
 DECK = [(rank, suit) for suit in SUITS for rank in range(2, 15)]
@@ -156,6 +156,64 @@ def benchmark(path, games, repeats):
               f"checksum={checksum} best_bid={best_bid} score_totals={','.join(map(str, totals))}")
 
 
+
+def evaluate_hand(my_hand, trials):
+    remaining = [card for card in DECK if card not in my_hand]
+    results = [play_game(my_hand, remaining) for _ in range(trials)]
+    scores = score_bids(results)
+    best_bid = max(range(14), key=scores.__getitem__)
+    return best_bid, scores
+
+
+def generate_dataset(path, length, trials):
+    row_id = 0
+    seed = 100
+    random.seed(seed)
+    deck = DECK.copy()
+
+    score_columns = [f"Bid {bid} Score" for bid in range(14)]
+    card_columns = [f"Card {number}" for number in range(1, 14)]
+    
+    with open(path, mode='x', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow([
+            "Row ID",
+            "Seed",
+            *card_columns,
+            "Number of Trials",
+            "Recommended Bid",
+            *score_columns,
+        ])
+
+        for _ in range(length):
+
+            row_id += 1
+            random.shuffle(deck)
+
+            my_hand = deck[:13]
+            best_bid, scores = evaluate_hand(my_hand, trials)
+
+            hand = []
+            for card in my_hand:
+                card_id = DECK.index(card)
+                hand.append(card_id)
+
+            hand.sort()
+            
+            print(f"generated row {row_id} of {length}")
+
+            new_row = [
+                row_id,
+                seed,
+                *hand,
+                trials,
+                best_bid,
+                *scores
+                ]
+            # Append the numbers as a single new row
+            writer.writerow(new_row)
+
+
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--benchmark":
         if len(sys.argv) != 5:
@@ -164,6 +222,17 @@ def main():
         if games <= 0 or repeats <= 0:
             raise SystemExit("GAMES and REPEATS must be positive")
         benchmark(sys.argv[2], games, repeats)
+        return
+
+    if len(sys.argv) > 1 and sys.argv[1] == "--generate-dataset":
+        if len(sys.argv) != 5:
+            raise SystemExit("usage: python spades_sim.py --generate-dataset PATH LENGTH TRIALS")
+
+        len_dataset, trials = map(int, sys.argv[3:])
+        if len_dataset <= 0 or trials <= 0: 
+            raise SystemExit("Dataset length and trials must be positive")
+
+        generate_dataset(sys.argv[2], len_dataset, trials)
         return
 
     num_trials = 10000
