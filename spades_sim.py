@@ -224,6 +224,11 @@ def main():
         benchmark(sys.argv[2], games, repeats)
         return
 
+    ## recall usage for --generate-dataset
+
+    if len(sys.argv) > 1 and sys.argv[1] == "--dataset-usage":
+        raise SystemExit("python SCRIPT_PATH --generate-dataset OUTPUT_PATH DATASET_LENGTH NUM_TRIALS")
+
     if len(sys.argv) > 1 and sys.argv[1] == "--generate-dataset":
         if len(sys.argv) != 5:
             raise SystemExit("usage: python spades_sim.py --generate-dataset PATH LENGTH TRIALS")
