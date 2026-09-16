@@ -7,3 +7,4 @@ __pycache__/
 testing.txt
 test_card_policy.py
 extras/
+test_data/
