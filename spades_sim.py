@@ -228,6 +228,7 @@ def main():
 
     if len(sys.argv) > 1 and sys.argv[1] == "--dataset-usage":
         raise SystemExit("python SCRIPT_PATH --generate-dataset OUTPUT_PATH DATASET_LENGTH NUM_TRIALS")
+    #Dataset length is also just the number of hands simulated
 
     if len(sys.argv) > 1 and sys.argv[1] == "--generate-dataset":
         if len(sys.argv) != 5:
