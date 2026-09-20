@@ -6,7 +6,11 @@ from spades_sim import DECK, evaluate_hand
 import csv
 import random
 import sys
+import numpy
 
+
+
+# bring results from specific seed and hand using `spades_sim.py` logic
 def test_hand(hand, seed, trials):
     
     random.seed(seed)
@@ -59,20 +63,70 @@ def bids_by_seed(path):
             bids_by_hand_seed[key].append(bid)
 
     return bids_by_hand_seed
+        
 
-def score_gap_analysis(trial_sorted, seed_sorted):
+def score_gap_analysis(stability_results, trial_sorted, seed_sorted):
+    #trial sorted input should be trial_sort_groups
+    #seed sorted input should be seed_sort_groups
+
     unstable_seed_keys = {
-        key
-        for key, bids in trial_sorted.items()
+        key for key, bids in seed_sorted.items()
         if len(set(bids)) != 1
     }
 
     unstable_trial_keys = {
-        key
-        for key, bids in seed_sorted.items()
+        key for key, bids in trial_sorted.items()
         if len(set(bids)) != 1
     }
-    return [unstable_seed_keys, unstable_trial_keys]
+
+    stable_seed_gaps = []
+    unstable_seed_gaps = []
+
+    stable_trial_gaps = []
+    unstable_trial_gaps = []
+
+    with open(stability_results, newline = "") as file:
+        reader = csv.DictReader(file)
+
+        for row in reader:
+
+            hand_id = int(row["Hand_ID"])
+            seed = int(row["Seed"])
+            trial = int(row["Trials"])
+            score_gap = float(row["Score Gap"])
+
+            trial_key = (hand_id, trial)
+            seed_key = (hand_id, seed)
+
+            if trial_key in unstable_trial_keys:
+                unstable_seed_gaps.append(score_gap)
+            else:
+                stable_seed_gaps.append(score_gap)
+
+            if seed_key in unstable_seed_keys:
+                unstable_trial_gaps.append(score_gap)
+            else:
+                stable_trial_gaps.append(score_gap)
+            # 
+
+    #return [unstable_seed_keys, unstable_trial_keys]
+    outputs = {
+        "stable_seed_gaps": stable_seed_gaps,
+        "unstable_seed_gaps": unstable_seed_gaps,
+        "stable_trial_gaps": stable_trial_gaps,
+        "unstable_trial_gaps": unstable_trial_gaps,
+    }
+
+    for name, output in outputs.items():
+
+        print(
+            f"{name} Count: {len(output)}, "
+            f"Mean Score Gap: {round(numpy.mean(output),3)}, "
+            f"Median Score Gap: {round(numpy.median(output),3)}"
+            )
+
+    return
+
 
 
 def stability_analysis(path):
@@ -108,6 +162,7 @@ def stability_analysis(path):
 
 
     ## need score gap analysis logic??
+    # bring using `unstable_keys` ??
     
 
     # return all agreement values for each seed and trial
@@ -116,19 +171,19 @@ def stability_analysis(path):
     print(f"All trial counts agree for every hand and seed: {all_trials_agree}")
 
     print(
-    f"Seed agreement: {stable_seed_groups}/{len(trial_sort_groups)} "
-    f"({seed_agree_rate:.1%})"
+        f"Seed agreement: {stable_seed_groups}/{len(trial_sort_groups)} "
+        f"({seed_agree_rate:.1%})"
     )
 
     print(
         f"Trial count agreement: {stable_trial_groups}/{len(seed_sort_groups)} "
         f"({trial_agree_rate:.1%})"
-        )
+    )
+
+    print("\nScore Gap Analysis:\n")
+    score_gap_analysis(path, trial_sort_groups, seed_sort_groups)
     
     return
-    
-
-
     
 
 def stability_data(data_path, path_out):
