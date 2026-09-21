@@ -69,12 +69,12 @@ def score_gap_analysis(stability_results, trial_sorted, seed_sorted):
     #trial sorted input should be trial_sort_groups
     #seed sorted input should be seed_sort_groups
 
-    unstable_seed_keys = {
+    unstable_trial_keys = {
         key for key, bids in seed_sorted.items()
         if len(set(bids)) != 1
     }
 
-    unstable_trial_keys = {
+    unstable_seed_keys = {
         key for key, bids in trial_sorted.items()
         if len(set(bids)) != 1
     }
@@ -98,12 +98,12 @@ def score_gap_analysis(stability_results, trial_sorted, seed_sorted):
             trial_key = (hand_id, trial)
             seed_key = (hand_id, seed)
 
-            if trial_key in unstable_trial_keys:
+            if trial_key in unstable_seed_keys:
                 unstable_seed_gaps.append(score_gap)
             else:
                 stable_seed_gaps.append(score_gap)
 
-            if seed_key in unstable_seed_keys:
+            if seed_key in unstable_trial_keys:
                 unstable_trial_gaps.append(score_gap)
             else:
                 stable_trial_gaps.append(score_gap)

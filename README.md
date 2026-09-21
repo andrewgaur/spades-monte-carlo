@@ -8,11 +8,11 @@ Both versions generate a random 13-card hand, keep it fixed, and simulate 10,000
 
 The C++ version completed the checked simulation workload 4.94 times faster than Python on the test machine. Across seven samples of 100,000 identical dealt games, Python's median runtime was 6.482 seconds and C++'s median was 1.311 seconds.
 
-Both implementations matched on all four trick totals for each shared fixture, the recommended bid, and every bid score total. See [benchmark_results.md](benchmark_results.md) for the raw measurements and machine details.
+Both implementations matched on all four trick totals for each shared fixture, the recommended bid, and every bid score total. See [benchmark_results.md](benchmark/benchmark_results.md) for the raw measurements and machine details.
 
 ## Python
 
-Source: [spades_sim.py](spades_sim.py)
+Source: [spades_sim.py](src/spades_sim.py)
 
 Requires Python 3. From the repository root:
 
