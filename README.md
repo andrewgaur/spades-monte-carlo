@@ -10,6 +10,26 @@ The C++ version completed the checked simulation workload 4.94 times faster than
 
 Both implementations matched on all four trick totals for each shared fixture, the recommended bid, and every bid score total. See [benchmark_results.md](benchmark/benchmark_results.md) for the raw measurements and machine details.
 
+## Machine-learning surrogate result
+
+The current experiment trains a ridge regression surrogate to approximate the Monte Carlo simulator's recommended bid. It uses 15 features derived only from the 13 cards in a hand, including suit counts, high-card values, honor counts, voids, singletons, and high spades. Simulator outputs, seeds, trial counts, and saved bid scores are excluded from the model inputs.
+
+The frozen pilot contains 1,000 simulated hands with a reproducible 80/20 split: 800 training hands and 200 held-out hands. On the held-out set, rounded Ridge predictions achieved:
+
+- Mean absolute error: 0.300 bids
+- Exact teacher-bid agreement: 70.0%
+- Within-one-bid accuracy: 100.0%
+
+The training-set median-bid baseline produced 0.975 mean absolute error, 35.5% exact agreement, and 79.0% within-one accuracy on the same held-out hands. Ridge predictions had zero score regret on 70.0% of held-out hands, with mean regret 3.137 and median regret 0 under the simulator's saved bid scores.
+
+These results measure agreement with a heuristic Monte Carlo teacher, not optimal Spades play or performance against human players. Model comparison, error analysis, and end-to-end latency measurement are still in progress.
+
+Run the current experiment from the repository root after installing `requirements.txt`:
+
+```sh
+python src/train_model.py
+```
+
 ## Python
 
 Source: [spades_sim.py](src/spades_sim.py)
@@ -17,7 +37,7 @@ Source: [spades_sim.py](src/spades_sim.py)
 Requires Python 3. From the repository root:
 
 ```sh
-python spades_sim.py
+python src/spades_sim.py
 ```
 
 ## C++
