@@ -6,8 +6,14 @@
 import csv
 from pathlib import Path
 import sys
-from sklearn.model_selection import train_test_split
 import numpy as np
+
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import Ridge
+from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.model_selection import KFold, cross_val_score, train_test_split
+
 
 #single hand feature extraction
 
@@ -68,6 +74,7 @@ def load_dataset(path):
 
     x = []
     y = []
+    score_rows = []
 
     with open(path, newline= "") as file:
         reader = csv.DictReader(file)
@@ -113,16 +120,17 @@ def load_dataset(path):
             
             x.append(features)
             y.append(rec_bid)
+            score_rows.append(scores)
 
         #checks
 
         if row_count != 1000:
             raise SystemExit(f"dataset should contain 1000 rows, found {row_count}")
 
-        if (len(x) != row_count or len(y) != row_count):
+        if (len(x) != row_count or len(y) != row_count or len(score_rows) != row_count):
             raise SystemExit(f"length of loaded dataset features does not equal {row_count}")
 
-    return x, y
+    return x, y, score_rows
 
 
 # train/test split
@@ -165,44 +173,229 @@ def split_dataset(x,y):
 
 #baseline evaluation
 
-def baseline_eval(y_train):
+def prediction_metrics(actual, predicted):
+    actual = np.array(actual)
+    predicted = np.array(predicted)
+
+    # mean absolute error
+    mae = np.mean(np.abs(actual-predicted))
+    # exact match rate
+    emr = np.mean(actual == predicted)
+    # within one accuracy
+    woa = np.mean(np.abs(actual - predicted) <= 1)
+
+    return mae, emr, woa
+
+
+def baseline_eval(x_train, y_train):
     # find median bid from y_train only
     # constant median baseline
 
-    med_bid = np.median(y_train)
 
-    bid_predictions = [med_bid for _ in y_train]
+    # make both prediction lists
+    # predicted bid based on median bid
+    med_bid = int(np.median(y_train))
+    median_predictions = [med_bid for _ in y_train]
+    
+    high_bid_predictions = []
+    # and predicted bid based on high card count
+    for hand in x_train:
+        q, k, a = hand[9:12]
+        high_count = q + k + a
+        high_bid_predictions.append(high_count)
+    
+    # return metrics/results for each
 
-    # results
-    # mean absolute error
-    median_base_MAE = np.mean(np.abs(np.array(y_train) - med_bid))
+    median_metrics = prediction_metrics(y_train, median_predictions)
+    high_card_metrics = prediction_metrics(y_train, high_bid_predictions)
 
-    # exact match rate
-    median_base_EMR = (y_train.count(2)) / len(y_train)
-
-    # within one accuracy
-    # find total count of numbers within 1 of the median bid,
-    # divided by length of bid training set to find accuracy percentage
-
-    median_base_WOA = (sum(1 for bid in y_train if abs(bid - med_bid) <= 1)) / len(y_train)
-
+    return median_metrics, high_card_metrics
     
 
+# model cross validation and selection
+def cross_val_models(x_train, y_train):
+    # should ONLY recieve training lists, never the test data
 
+    # Ridge works better when features have comparable ranges
+    # features currently have diff ranges, so StandardScaler rescales them
+    # before Ridge fits
 
-#model cross-validation and selection
+    ridge = make_pipeline(
+        StandardScaler(),
+        Ridge()
+    )
+
+    boosting = HistGradientBoostingRegressor(
+        random_state = 42
+    )
+
+    # fixed seed to make the folds reproducible
+    folds = KFold(
+        n_splits = 5,
+        shuffle = True,
+        random_state=42
+    )
+
+    # and evaluate each model
+    ridge_scores = cross_val_score(
+        ridge,
+        x_train,
+        y_train,
+        cv=folds,
+        scoring = "neg_mean_absolute_error"
+    )
+
+    ridge_errors = -ridge_scores
+    ridge_mean = np.mean(ridge_errors)
+    ridge_std = np.std(ridge_errors)
+
+    boosting_scores = cross_val_score(
+        boosting,
+        x_train,
+        y_train,
+        cv = folds,
+        scoring = "neg_mean_absolute_error"
+    )
+
+    boosting_errors = -boosting_scores
+    boosting_mean = np.mean(boosting_errors)
+    boosting_std = np.std(boosting_errors)
+
+    return ridge_mean, ridge_std, boosting_mean, boosting_std
+
 
 #final held-out eval
 
+def final_eval(x_train, y_train, x_test, y_test):
+    # recreate the models
+
+    ridge = make_pipeline(
+        StandardScaler(),
+        Ridge()
+    )
+
+    # fit ridge model
+    ridge.fit(x_train, y_train)
+    # test data from x_test and y_test must NEVER appear in .fit()
+
+    #generate test predictions
+    ridge_raw_predictions = ridge.predict(x_test)
+
+    ridge_continuous_mae = np.mean(np.abs(np.array(y_test) - ridge_raw_predictions))
+
+    ridge_bid_predictions = np.clip(np.rint(ridge_raw_predictions), 0, 13).astype(int)
+
+    ridge_metrics = prediction_metrics(y_test, ridge_bid_predictions)
+
+    median_bid = int(np.median(y_train)) 
+    median_test_predictions = [median_bid] * len(y_test)
+
+    median_test_metrics = prediction_metrics(
+        y_test,
+        median_test_predictions,
+    )
+
+    return (
+    ridge,
+    ridge_continuous_mae,
+    ridge_metrics,
+    median_test_metrics,
+    ridge_bid_predictions,
+)
+
 #error analysis and score regret
+
+def calculate_regret(score_rows, test_indices, y_test, predictions):
+    regrets = []
+
+    for i in range(len(test_indices)):
+        original_index = test_indices[i]
+        scores = score_rows[original_index]
+
+        teacher_bid = y_test[i]
+        predicted_bid = predictions[i]
+
+        teacher_score = scores[teacher_bid]
+        predicted_score = scores[predicted_bid]
+
+        regret = teacher_score - predicted_score
+        regrets.append(regret)
+        
+
+    return regrets
+
 
 #latency benchmark
 
 def main(DATA_PATH):
-    x, y = load_dataset(DATA_PATH)
-    split_results = split_dataset(x, y)
-    for item in split_results:
-        print(len(item))
+    x, y, score_rows = load_dataset(DATA_PATH)
+    (
+        x_train,
+        x_test,
+        y_train,
+        y_test,
+        train_indices,
+        test_indices,
+    ) = split_dataset(x, y)
+
+    (
+        ridge,
+        ridge_continuous_mae,
+        ridge_metrics,
+        median_test_metrics,
+        ridge_bid_predictions,
+    ) = final_eval(x_train, y_train, x_test, y_test)
+
+    ridge_regrets = calculate_regret(
+        score_rows,
+        test_indices,
+        y_test,
+        ridge_bid_predictions,
+    )
+
+    assert len(ridge_regrets) == len(y_test)
+    assert all(regret >= 0 for regret in ridge_regrets)
+
+    mean_regret = np.mean(ridge_regrets)
+    median_regret = np.median(ridge_regrets)
+    max_regret = np.max(ridge_regrets)
+    zero_regret_rate = np.mean(np.isclose(ridge_regrets, 0))
+
+
+    ridge_mae, ridge_emr, ridge_woa = ridge_metrics
+    median_mae, median_emr, median_woa = median_test_metrics
+
+    print("Selected Ridge held-out results:")
+    print(f"Continuous MAE: {ridge_continuous_mae:.4f}")
+    print(f"Rounded bid MAE: {ridge_mae:.4f}")
+    print(f"Exact match: {ridge_emr:.2%}")
+    print(f"Within one: {ridge_woa:.2%}")
+
+    print("\nMedian held-out baseline:")
+    print(f"MAE: {median_mae:.4f}")
+    print(f"Exact match: {median_emr:.2%}")
+    print(f"Within one: {median_woa:.2%}")
+
+    print("\nRidge score regret:")
+    print(f"Mean regret: {mean_regret:.4f}")
+    print(f"Median regret: {median_regret:.4f}")
+    print(f"Maximum regret: {max_regret:.4f}")
+    print(f"Zero-regret rate: {zero_regret_rate:.2%}")
+
+    worst_position = int(np.argmax(ridge_regrets))
+    worst_original_index = test_indices[worst_position]
+    worst_scores = score_rows[worst_original_index]
+
+    print("\nWorst Ridge prediction:")
+    print(f"Original dataset index: {worst_original_index}")
+    print(f"Teacher bid: {y_test[worst_position]}")
+    print(f"Predicted bid: {ridge_bid_predictions[worst_position]}")
+    print(f"Teacher score: {worst_scores[y_test[worst_position]]:.4f}")
+    print(f"Predicted score: {worst_scores[ridge_bid_predictions[worst_position]]:.4f}")
+    print(f"Regret: {ridge_regrets[worst_position]:.4f}")
+    
+    #for item in split_results:
+    #    print(len(item))
 
 if __name__ == "__main__":
     root = Path(__file__).resolve().parents[1]
