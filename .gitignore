@@ -7,3 +7,5 @@ __pycache__/
 testing.txt
 test_card_policy.py
 extras/
+.qtcreator/
+.qtc_clangd

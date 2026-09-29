@@ -43,7 +43,7 @@ Hand deck() {
     // for each suit, add each rank of cards to the deck (4 suits, 13 ranks per suit)
     // worth noting that the rank is the first value of the card, and the suit is second
 
-    for (const std::string suit : {"Spades", "Hearts", "Diamonds", "Clubs"})
+    for (const std::string& suit : {"Spades", "Hearts", "Diamonds", "Clubs"})
         for (int rank = 2; rank < 15; ++rank) cards.emplace_back(rank, suit);
 
     // return the completed deck
@@ -301,6 +301,8 @@ std::vector<Fixture> load_fixtures(const std::string& path) {
     
     std::ifstream input(path);
     
+    // check any errors & initialize benchmarking variables
+
     if (!input) throw std::runtime_error("Could not open fixture file: " + path);
     
     std::vector<Fixture> fixtures;
@@ -346,6 +348,8 @@ std::vector<Fixture> load_fixtures(const std::string& path) {
     return fixtures;
 }
 
+// the actual benchmarking/measuring. calls load_fixtures to load hands from benchmark_fixtures
+
 void benchmark(const std::string& path, int games, int repeats) {
     
     const auto fixtures = load_fixtures(path);
@@ -366,6 +370,8 @@ void benchmark(const std::string& path, int games, int repeats) {
     }
     
     std::cout << '\n';
+
+    // benchmarking. 
 
     for (int i = 0; i < games; ++i) {
         const auto& fixture = fixtures[i % fixtures.size()];
